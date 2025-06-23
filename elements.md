@@ -7,3 +7,9 @@
 - Cooperation
 - Guardrails
 - Memory
+
+# AI Agents Tools Elements
+
+- Versatile (deal with different types of problems)
+- Fault tolerant (able to handle errors gracefully)
+- Caching (store and reuse previous results)

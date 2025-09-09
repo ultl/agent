@@ -1,0 +1,1 @@
+docker run -p 5080:5080 -e ZO_ROOT_USER_EMAIL=a@gmail.com -e ZO_ROOT_USER_PASSWORD=1234 openobserve/openobserve:latest

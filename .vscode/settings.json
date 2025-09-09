@@ -1,14 +1,20 @@
 {
-  "cSpell.words": [
-    "Agentspace",
-    "Blocklists",
-    "chatbots",
-    "Marlow",
-    "NLTK",
-    "Olcan",
-    "Pydantic",
-    "Sercinoglu",
-    "Vuskovic",
-    "Wiesinger"
-  ]
+	"cSpell.words": [
+		"Agentspace",
+		"Blocklists",
+		"byeprint",
+		"chatbots",
+		"dotenv",
+		"logfire",
+		"Marlow",
+		"minilm",
+		"NLTK",
+		"Nual",
+		"Olcan",
+		"Ollama",
+		"Pydantic",
+		"Sercinoglu",
+		"Vuskovic",
+		"Wiesinger"
+	]
 }

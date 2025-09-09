@@ -8,12 +8,16 @@
 		"logfire",
 		"Marlow",
 		"minilm",
+		"nexveridian",
 		"NLTK",
 		"Nual",
 		"Olcan",
 		"Ollama",
 		"Pydantic",
+		"pytestmark",
 		"Sercinoglu",
+		"Toggleable",
+		"toolsets",
 		"Vuskovic",
 		"Wiesinger"
 	]

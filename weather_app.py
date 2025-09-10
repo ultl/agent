@@ -1,162 +1,80 @@
 from __future__ import annotations as _annotations
 
 import asyncio
-from dataclasses import dataclass, field
-from datetime import UTC, date
-from itertools import starmap
+from dataclasses import dataclass
 from typing import Any
 
-import pytest
-from dirty_equals import IsNow, IsStr
-from pydantic_ai import Agent, RequestUsage, RunContext, capture_run_messages, models
-from pydantic_ai.messages import (
-  ModelRequest,
-  ModelResponse,
-  SystemPromptPart,
-  TextPart,
-  ToolCallPart,
-  ToolReturnPart,
-  UserPromptPart,
-)
-from pydantic_ai.models.test import TestModel
+from byeprint import p
+from httpx import AsyncClient
+from pydantic import BaseModel
+from pydantic_ai import Agent, RunContext
 
 from constant import model
 
 
-class WeatherService:
-  def get_historic_weather(self, location: str, forecast_date: date) -> str:
-    return 'Sunny with a chance of rain'
-
-  def get_forecast(self, location: str, forecast_date: date) -> str:
-    return 'Rainy with a chance of sun'
-
-  async def __aenter__(self) -> WeatherService:
-    return self
-
-  async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-    pass
-
-
-class FakeTable:
-  def get(self, name: str) -> int | None:
-    if name == 'John Doe':
-      return 123
-
-
 @dataclass
-class DatabaseConn:
-  users: FakeTable = field(default_factory=FakeTable)
-  _forecasts: dict[int, str] = field(default_factory=dict)
-
-  async def execute(self, query: str) -> list[dict[str, Any]]:
-    return [{'id': 123, 'name': 'John Doe'}]
-
-  async def store_forecast(self, user_id: int, forecast: str) -> None:
-    self._forecasts[user_id] = forecast
-
-  async def get_forecast(self, user_id: int) -> str | None:
-    return self._forecasts.get(user_id)
-
-
-class QueryError(RuntimeError):
-  pass
+class Deps:
+  client: AsyncClient
 
 
 weather_agent = Agent(
   model=model,
-  deps_type=WeatherService,
-  system_prompt='Providing a weather forecast at the locations the user provides.',
+  instructions='Be concise, reply with one sentence.',
+  deps_type=Deps,
+  retries=2,
 )
 
 
+class LatLng(BaseModel):
+  lat: float
+  lng: float
+
+
 @weather_agent.tool
-def weather_forecast(ctx: RunContext[WeatherService], location: str, forecast_date: date) -> str:
-  if forecast_date < date.today():
-    return ctx.deps.get_historic_weather(location, forecast_date)
-  return ctx.deps.get_forecast(location, forecast_date)
+async def get_lat_lng(ctx: RunContext[Deps], location_description: str) -> LatLng:
+  r = await ctx.deps.client.get(
+    url='https://demo-endpoints.pydantic.workers.dev/latlng',
+    params={'location': location_description},
+  )
+  r.raise_for_status()
+  p(r.raise_for_status())
+  p(r.content)
+  p(LatLng.model_validate_json(r.content))
+  return LatLng.model_validate_json(r.content)
 
 
-async def run_weather_forecast(user_prompts: list[tuple[str, int]], conn: DatabaseConn):
-  """Run weather forecast for a list of user prompts and save."""
-  async with WeatherService() as weather_service:
-
-    async def run_forecast(prompt: str, user_id: int):
-      result = await weather_agent.run(prompt, deps=weather_service)
-      await conn.store_forecast(user_id, result.output)
-
-    # run all prompts in parallel
-    await asyncio.gather(*starmap(run_forecast, user_prompts))
-
-
-pytestmark = pytest.mark.anyio
-models.ALLOW_MODEL_REQUESTS = False
-
-
-async def test_forecast():
-  conn = DatabaseConn()
-  user_id = 1
-  with capture_run_messages() as messages, weather_agent.override(model=TestModel()):
-    prompt = 'What will the weather be like in London on 2024-11-28?'
-    await run_weather_forecast([(prompt, user_id)], conn)
-
-  forecast = await conn.get_forecast(user_id)
-  assert forecast == '{"weather_forecast":"Sunny with a chance of rain"}'
-
-  assert messages == [
-    ModelRequest(
-      parts=[
-        SystemPromptPart(
-          content='Providing a weather forecast at the locations the user provides.',
-          timestamp=IsNow(tz=UTC),
-        ),
-        UserPromptPart(
-          content='What will the weather be like in London on 2024-11-28?',
-          timestamp=IsNow(tz=UTC),
-        ),
-      ]
+@weather_agent.tool
+async def get_weather(ctx: RunContext[Deps], lat: float, lng: float) -> dict[str, Any]:
+  temp_response, descr_response = await asyncio.gather(
+    ctx.deps.client.get(
+      url='https://demo-endpoints.pydantic.workers.dev/number',
+      params={'min': 10, 'max': 30},
     ),
-    ModelResponse(
-      parts=[
-        ToolCallPart(
-          tool_name='weather_forecast',
-          args={
-            'location': 'a',
-            'forecast_date': '2024-01-01',
-          },
-          tool_call_id=IsStr(),
-        )
-      ],
-      usage=RequestUsage(
-        input_tokens=71,
-        output_tokens=7,
-      ),
-      model_name='test',
-      timestamp=IsNow(tz=UTC),
+    ctx.deps.client.get(
+      url='https://demo-endpoints.pydantic.workers.dev/weather',
+      params={'lat': lat, 'lng': lng},
     ),
-    ModelRequest(
-      parts=[
-        ToolReturnPart(
-          tool_name='weather_forecast',
-          content='Sunny with a chance of rain',
-          tool_call_id=IsStr(),
-          timestamp=IsNow(tz=UTC),
-        ),
-      ],
-    ),
-    ModelResponse(
-      parts=[
-        TextPart(
-          content='{"weather_forecast":"Sunny with a chance of rain"}',
-        )
-      ],
-      usage=RequestUsage(
-        input_tokens=77,
-        output_tokens=16,
-      ),
-      model_name='test',
-      timestamp=IsNow(tz=UTC),
-    ),
-  ]
+  )
+  temp_response.raise_for_status()
+  descr_response.raise_for_status()
+  p(temp_response.raise_for_status())
+  p(descr_response.raise_for_status())
+  p({
+    'temperature': f'{temp_response.text} °C',
+    'description': descr_response.text,
+  })
+  return {
+    'temperature': f'{temp_response.text} °C',
+    'description': descr_response.text,
+  }
 
 
-asyncio.run(test_forecast())
+async def main() -> None:
+  async with AsyncClient() as client:
+    deps = Deps(client=client)
+    result = await weather_agent.run('What is the weather like in Vietnam and in Wiltshire?', deps=deps)  # type: ignore
+    p('Response:', result.output)
+
+
+if __name__ == '__main__':
+  asyncio.run(main())

@@ -12,7 +12,7 @@ logfire.configure(
 )
 logfire.instrument_pydantic_ai()
 
-MODEL_NAME = 'google/gemma-3-12b'
+MODEL_NAME = 'openai/gpt-oss-20b'
 ANOTHER_MODEL_NAME = 'openreasoning-nemotron-32b'
 PROVIDER = OpenAIProvider(base_url='http://localhost:1234/v1')
 model = OpenAIChatModel(model_name=MODEL_NAME, provider=PROVIDER)
